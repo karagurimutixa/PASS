@@ -79,15 +79,12 @@
 
     <script>
         let lastPosition = null;
-        let alertTimer = null;
-        let movementTimeout = null;
         let alertTriggered = false;
-        let manualAlarmTimer = null;
-        let manualAlarmTriggered = false;
+        let stopButtonClickCount = 0; // Track number of stop button clicks
         let preAlarmAudio = new Audio('https://www.soundjay.com/button/beep-07.wav'); // Pre-alarm sound (lower volume)
         let mainAlarmAudio = new Audio('https://www.soundjay.com/button/beep-08b.wav'); // Main alarm sound (louder)
-
-        let touchStartTime = null;
+        let touchStartTime = 0; // Store the touch start time
+        let touchEndTime = 0; // Store the touch end time
 
         // Request location when button is clicked
         document.getElementById('getLocationBtn').addEventListener('click', () => {
@@ -113,7 +110,7 @@
         // Start movement monitoring every second
         function startMovementCheck(position) {
             // Check movement every second
-            movementTimeout = setInterval(() => {
+            setInterval(() => {
                 navigator.geolocation.getCurrentPosition((newPosition) => {
                     let distance = calculateDistance(position.coords, newPosition.coords);
                     if (distance > 0.01) {
@@ -141,7 +138,7 @@
             return distance;
         }
 
-        // Trigger the alert if no movement is detected for 20 seconds
+        // Trigger the alarm
         function triggerAlert() {
             if (alertTriggered) return; // Prevent multiple triggers
             alertTriggered = true;
@@ -149,7 +146,7 @@
             // Make corners red and turn the background to red
             document.body.classList.add('red-corners');
             document.body.classList.add('red-alert');
-            document.getElementById('status').textContent = 'No movement detected. Alarm starting soon!';
+            document.getElementById('status').textContent = 'Alarm triggered due to inactivity and stop button clicks!';
 
             // Start pre-alarm sound at lower volume
             preAlarmAudio.volume = 0.1; // Set low volume for pre-alarm
@@ -169,65 +166,44 @@
 
         // Reset the alert and clear any previous timers
         function resetAlert() {
-            clearTimeout(alertTimer);
             alertTriggered = false;
             document.body.classList.remove('red-corners', 'red-alert');
             preAlarmAudio.pause();
             preAlarmAudio.currentTime = 0;
+            mainAlarmAudio.pause();
+            mainAlarmAudio.currentTime = 0;
             document.getElementById('status').textContent = 'Device is moving, monitoring again...';
         }
 
-        // Monitor movement and trigger alert if needed
-        let movementCheckInterval = setInterval(() => {
-            if (lastPosition) {
-                // If no movement detected for 20 seconds, trigger the alert
-                alertTimer = setTimeout(triggerAlert, 20000); // 20 seconds without movement
-            }
-        }, 1000); // Check for movement every second
-
-        // Detect manual touch for 5 seconds
-        document.body.addEventListener('touchstart', (e) => {
-            touchStartTime = Date.now();
-        });
-
-        document.body.addEventListener('touchend', (e) => {
-            if (touchStartTime && (Date.now() - touchStartTime) >= 5000) {
-                triggerManualAlarm();
-            }
-            touchStartTime = null;
-        });
-
-        // Trigger manual alarm
-        function triggerManualAlarm() {
-            if (manualAlarmTriggered) return; // Prevent multiple triggers
-            manualAlarmTriggered = true;
-            
-            // Start manual alarm
-            mainAlarmAudio.volume = 1; // Set high volume for main alarm
-            mainAlarmAudio.loop = true;
-            mainAlarmAudio.play();
-
-            // Flash the screen
-            document.body.classList.add('flashing');
-            document.getElementById('status').textContent = 'Manual alarm triggered! Press "Stop Alarm" to stop.';
-        }
-
-        // Function to stop alarm and flashing
-        function stopAlarm() {
-            mainAlarmAudio.pause();
-            mainAlarmAudio.currentTime = 0;
-            preAlarmAudio.pause();
-            preAlarmAudio.currentTime = 0;
-            document.body.classList.remove('flashing', 'red-corners', 'red-alert');
-            document.getElementById('status').textContent = 'Alert resolved. You are safe now.';
-            manualAlarmTriggered = false;
-        }
-
-        // Add a button to stop the alarm
+        // Handle stop button click logic
         let stopButton = document.createElement('button');
         stopButton.textContent = 'Stop Alarm';
-        stopButton.addEventListener('click', stopAlarm);
+        stopButton.addEventListener('click', () => {
+            stopButtonClickCount++; // Increment click count
+            if (stopButtonClickCount >= 3) {
+                // If clicked 3 times, trigger the alarm
+                triggerAlert();
+            }
+        });
         document.body.appendChild(stopButton);
+
+        // Add a timeout to detect inactivity (5 seconds without touch)
+        let touchTimer = setTimeout(() => {
+            if (stopButtonClickCount >= 3) {
+                triggerAlert(); // Trigger if the button is clicked 3 times without screen interaction
+            }
+        }, 5000); // Wait for 5 seconds of inactivity
+
+        // Track touch events to reset inactivity timer
+        document.body.addEventListener('touchstart', () => {
+            clearTimeout(touchTimer); // Reset inactivity timer when the screen is touched
+            touchTimer = setTimeout(() => {
+                if (stopButtonClickCount >= 3) {
+                    triggerAlert(); // Trigger if button is clicked 3 times and no further touch
+                }
+            }, 5000); // Wait for 5 seconds of inactivity
+        });
+
     </script>
 </body>
 </html>
