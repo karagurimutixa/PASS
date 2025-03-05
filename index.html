@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Location-Based Alert</title>
     <style>
-        /* Basic Reset */
         * {
             margin: 0;
             padding: 0;
@@ -16,6 +15,7 @@
             font-family: Arial, sans-serif;
             text-align: center;
             padding-top: 50px;
+            background-color: white;
             transition: background-color 0.3s ease;
         }
 
@@ -38,25 +38,21 @@
             background-color: #218838;
         }
 
-        /* Flashing effect */
         .flashing {
             background-color: white;
             animation: flash 0.1s infinite alternate;
         }
 
-        /* Alarm Red Border */
         .red-corners {
             border: 10px solid red;
         }
 
-        /* Movement indicator */
         #movementStatus {
             margin-top: 20px;
             font-size: 1.5rem;
             color: #555;
         }
 
-        /* Keyframes for flashing */
         @keyframes flash {
             0% {
                 background-color: white;
@@ -69,7 +65,6 @@
             }
         }
 
-        /* Red Alert Mode */
         .red-alert {
             background-color: red;
             color: white;
@@ -87,8 +82,12 @@
         let alertTimer = null;
         let movementTimeout = null;
         let alertTriggered = false;
-        let alarmAudio = new Audio('https://www.soundjay.com/button/beep-07.wav'); // Placeholder sound
-        let movementDetected = false;
+        let manualAlarmTimer = null;
+        let manualAlarmTriggered = false;
+        let preAlarmAudio = new Audio('https://www.soundjay.com/button/beep-07.wav'); // Pre-alarm sound (lower volume)
+        let mainAlarmAudio = new Audio('https://www.soundjay.com/button/beep-08b.wav'); // Main alarm sound (louder)
+
+        let touchStartTime = null;
 
         // Request location when button is clicked
         document.getElementById('getLocationBtn').addEventListener('click', () => {
@@ -99,6 +98,7 @@
                         startMovementCheck(position);
                         document.getElementById('status').textContent = 'Location Obtained. Monitoring Movement...';
                         document.getElementById('movementStatus').textContent = 'Monitoring movement...';
+                        document.getElementById('getLocationBtn').style.display = 'none'; // Hide the "Allow Location" button
                     },
                     (err) => {
                         console.error('Geolocation Error: ', err);
@@ -118,12 +118,10 @@
                     let distance = calculateDistance(position.coords, newPosition.coords);
                     if (distance > 0.01) {
                         // If moved significantly
-                        movementDetected = true;
                         resetAlert();
                         document.getElementById('movementStatus').textContent = 'Device is moving!';
                     } else {
                         // If no significant movement
-                        movementDetected = false;
                         document.getElementById('movementStatus').textContent = 'Device is stationary!';
                     }
                 });
@@ -148,17 +146,23 @@
             if (alertTriggered) return; // Prevent multiple triggers
             alertTriggered = true;
 
-            // Make corners red
+            // Make corners red and turn the background to red
             document.body.classList.add('red-corners');
+            document.body.classList.add('red-alert');
+            document.getElementById('status').textContent = 'No movement detected. Alarm starting soon!';
 
-            // Set timer for the alarm to start after 15 seconds
+            // Start pre-alarm sound at lower volume
+            preAlarmAudio.volume = 0.1; // Set low volume for pre-alarm
+            preAlarmAudio.loop = true;
+            preAlarmAudio.play();
+
+            // Set timer for the main alarm to start after 15 seconds
             setTimeout(() => {
                 if (alertTriggered) {
-                    // Start flashing the screen
-                    document.body.classList.add('flashing');
-                    alarmAudio.loop = true;
-                    alarmAudio.play(); // Play alarm sound
-                    document.getElementById('status').textContent = 'ALERT! Please respond!';
+                    // Start main alarm sound (louder)
+                    mainAlarmAudio.volume = 1; // Set high volume for main alarm
+                    mainAlarmAudio.loop = true;
+                    mainAlarmAudio.play();
                 }
             }, 15000); // Trigger after 15 seconds of no movement
         }
@@ -167,24 +171,56 @@
         function resetAlert() {
             clearTimeout(alertTimer);
             alertTriggered = false;
-            document.body.classList.remove('red-corners', 'red-alert', 'flashing');
+            document.body.classList.remove('red-corners', 'red-alert');
+            preAlarmAudio.pause();
+            preAlarmAudio.currentTime = 0;
             document.getElementById('status').textContent = 'Device is moving, monitoring again...';
         }
 
         // Monitor movement and trigger alert if needed
         let movementCheckInterval = setInterval(() => {
-            if (lastPosition && !movementDetected) {
+            if (lastPosition) {
                 // If no movement detected for 20 seconds, trigger the alert
                 alertTimer = setTimeout(triggerAlert, 20000); // 20 seconds without movement
             }
         }, 1000); // Check for movement every second
 
+        // Detect manual touch for 5 seconds
+        document.body.addEventListener('touchstart', (e) => {
+            touchStartTime = Date.now();
+        });
+
+        document.body.addEventListener('touchend', (e) => {
+            if (touchStartTime && (Date.now() - touchStartTime) >= 5000) {
+                triggerManualAlarm();
+            }
+            touchStartTime = null;
+        });
+
+        // Trigger manual alarm
+        function triggerManualAlarm() {
+            if (manualAlarmTriggered) return; // Prevent multiple triggers
+            manualAlarmTriggered = true;
+            
+            // Start manual alarm
+            mainAlarmAudio.volume = 1; // Set high volume for main alarm
+            mainAlarmAudio.loop = true;
+            mainAlarmAudio.play();
+
+            // Flash the screen
+            document.body.classList.add('flashing');
+            document.getElementById('status').textContent = 'Manual alarm triggered! Press "Stop Alarm" to stop.';
+        }
+
         // Function to stop alarm and flashing
         function stopAlarm() {
-            alarmAudio.pause();
-            alarmAudio.currentTime = 0;
-            document.body.classList.remove('flashing', 'red-corners');
+            mainAlarmAudio.pause();
+            mainAlarmAudio.currentTime = 0;
+            preAlarmAudio.pause();
+            preAlarmAudio.currentTime = 0;
+            document.body.classList.remove('flashing', 'red-corners', 'red-alert');
             document.getElementById('status').textContent = 'Alert resolved. You are safe now.';
+            manualAlarmTriggered = false;
         }
 
         // Add a button to stop the alarm
