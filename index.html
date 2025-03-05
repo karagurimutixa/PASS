@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Location-Based Alert</title>
+    <style>
+        /* Basic Reset */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding-top: 50px;
+            transition: background-color 0.3s ease;
+        }
+
+        h1 {
+            font-size: 2rem;
+            margin-bottom: 20px;
+        }
+
+        button {
+            padding: 15px 25px;
+            font-size: 1.2rem;
+            cursor: pointer;
+            background-color: #28a745;
+            border: none;
+            color: white;
+            border-radius: 5px;
+        }
+
+        button:active {
+            background-color: #218838;
+        }
+
+        /* Flashing effect */
+        .flashing {
+            background-color: white;
+            animation: flash 0.1s infinite alternate;
+        }
+
+        /* Alarm Red Border */
+        .red-corners {
+            border: 10px solid red;
+        }
+
+        /* Keyframes for flashing */
+        @keyframes flash {
+            0% {
+                background-color: white;
+            }
+            50% {
+                background-color: red;
+            }
+            100% {
+                background-color: white;
+            }
+        }
+
+        /* Red Alert Mode */
+        .red-alert {
+            background-color: red;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <h1>Get Your Location</h1>
+    <button id="getLocationBtn">Allow Location</button>
+    <div id="status" style="margin-top: 20px;"></div>
+
+    <script>
+        let lastPosition = null;
+        let alertTimer = null;
+        let movementTimeout = null;
+        let alertTriggered = false;
+        let alarmAudio = new Audio('https://www.soundjay.com/button/beep-07.wav'); // Placeholder sound
+
+        // Request location when button is clicked
+        document.getElementById('getLocationBtn').addEventListener('click', () => {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        lastPosition = position;
+                        startMovementCheck(position);
+                        document.getElementById('status').textContent = 'Location Obtained. Monitoring Movement...';
+                    },
+                    (err) => {
+                        console.error('Geolocation Error: ', err);
+                        document.getElementById('status').textContent = 'Error getting location!';
+                    }
+                );
+            } else {
+                alert('Geolocation is not supported by this browser.');
+            }
+        });
+
+        // Start movement monitoring
+        function startMovementCheck(position) {
+            // Check movement every 5 seconds
+            movementTimeout = setInterval(() => {
+                navigator.geolocation.getCurrentPosition((newPosition) => {
+                    let distance = calculateDistance(position.coords, newPosition.coords);
+                    if (distance > 0.01) {
+                        // Reset alert if moved
+                        clearTimeout(alertTimer);
+                        alertTriggered = false;
+                        document.body.classList.remove('red-corners', 'red-alert', 'flashing');
+                        document.getElementById('status').textContent = 'Location obtained. Monitoring movement...';
+                    }
+                });
+            }, 5000); // Check every 5 seconds
+        }
+
+        // Calculate distance between two points (in kilometers)
+        function calculateDistance(coords1, coords2) {
+            const R = 6371; // Radius of Earth in km
+            const dLat = (coords2.latitude - coords1.latitude) * Math.PI / 180;
+            const dLon = (coords2.longitude - coords1.longitude) * Math.PI / 180;
+            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(coords1.latitude * Math.PI / 180) * Math.cos(coords2.latitude * Math.PI / 180) *
+                Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            const distance = R * c; // Distance in km
+            return distance;
+        }
+
+        // Trigger the alert if no movement is detected for 20 seconds
+        function triggerAlert() {
+            if (alertTriggered) return; // Prevent multiple triggers
+            alertTriggered = true;
+
+            // Make corners red
+            document.body.classList.add('red-corners');
+
+            // Set timer for the alarm to start after 15 seconds
+            setTimeout(() => {
+                if (alertTriggered) {
+                    // Start flashing the screen
+                    document.body.classList.add('flashing');
+                    alarmAudio.loop = true;
+                    alarmAudio.play(); // Play alarm sound
+                    document.getElementById('status').textContent = 'ALERT! Please respond!';
+                }
+            }, 15000); // Trigger after 15 seconds of no movement
+        }
+
+        // Monitor movement and trigger alert if needed
+        let movementCheckInterval = setInterval(() => {
+            if (lastPosition) {
+                navigator.geolocation.getCurrentPosition((newPosition) => {
+                    let distance = calculateDistance(lastPosition.coords, newPosition.coords);
+                    if (distance < 0.001) {
+                        // If no significant movement for 20 seconds
+                        if (!alertTriggered) {
+                            alertTimer = setTimeout(triggerAlert, 20000); // 20 seconds without movement
+                        }
+                    } else {
+                        // Reset if moved
+                        clearTimeout(alertTimer);
+                        alertTriggered = false;
+                        document.body.classList.remove('red-corners', 'red-alert', 'flashing');
+                    }
+                });
+            }
+        }, 5000); // Check for movement every 5 seconds
+
+        // Function to stop alarm and flashing
+        function stopAlarm() {
+            alarmAudio.pause();
+            alarmAudio.currentTime = 0;
+            document.body.classList.remove('flashing', 'red-corners');
+            document.getElementById('status').textContent = 'Alert resolved. You are safe now.';
+        }
+
+        // Add a button to stop the alarm
+        let stopButton = document.createElement('button');
+        stopButton.textContent = 'Stop Alarm';
+        stopButton.addEventListener('click', stopAlarm);
+        document.body.appendChild(stopButton);
+    </script>
+</body>
+</html>
