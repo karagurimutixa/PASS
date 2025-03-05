@@ -2,7 +2,6 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <--!Hi-->
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Location-Based Alert</title>
     <style>
@@ -50,6 +49,13 @@
             border: 10px solid red;
         }
 
+        /* Movement indicator */
+        #movementStatus {
+            margin-top: 20px;
+            font-size: 1.5rem;
+            color: #555;
+        }
+
         /* Keyframes for flashing */
         @keyframes flash {
             0% {
@@ -74,6 +80,7 @@
     <h1>Get Your Location</h1>
     <button id="getLocationBtn">Allow Location</button>
     <div id="status" style="margin-top: 20px;"></div>
+    <div id="movementStatus">Waiting for location...</div>
 
     <script>
         let lastPosition = null;
@@ -81,6 +88,7 @@
         let movementTimeout = null;
         let alertTriggered = false;
         let alarmAudio = new Audio('https://www.soundjay.com/button/beep-07.wav'); // Placeholder sound
+        let movementDetected = false;
 
         // Request location when button is clicked
         document.getElementById('getLocationBtn').addEventListener('click', () => {
@@ -90,6 +98,7 @@
                         lastPosition = position;
                         startMovementCheck(position);
                         document.getElementById('status').textContent = 'Location Obtained. Monitoring Movement...';
+                        document.getElementById('movementStatus').textContent = 'Monitoring movement...';
                     },
                     (err) => {
                         console.error('Geolocation Error: ', err);
@@ -101,21 +110,24 @@
             }
         });
 
-        // Start movement monitoring
+        // Start movement monitoring every second
         function startMovementCheck(position) {
-            // Check movement every 5 seconds
+            // Check movement every second
             movementTimeout = setInterval(() => {
                 navigator.geolocation.getCurrentPosition((newPosition) => {
                     let distance = calculateDistance(position.coords, newPosition.coords);
                     if (distance > 0.01) {
-                        // Reset alert if moved
-                        clearTimeout(alertTimer);
-                        alertTriggered = false;
-                        document.body.classList.remove('red-corners', 'red-alert', 'flashing');
-                        document.getElementById('status').textContent = 'Location obtained. Monitoring movement...';
+                        // If moved significantly
+                        movementDetected = true;
+                        resetAlert();
+                        document.getElementById('movementStatus').textContent = 'Device is moving!';
+                    } else {
+                        // If no significant movement
+                        movementDetected = false;
+                        document.getElementById('movementStatus').textContent = 'Device is stationary!';
                     }
                 });
-            }, 5000); // Check every 5 seconds
+            }, 1000); // Check every second
         }
 
         // Calculate distance between two points (in kilometers)
@@ -151,25 +163,21 @@
             }, 15000); // Trigger after 15 seconds of no movement
         }
 
+        // Reset the alert and clear any previous timers
+        function resetAlert() {
+            clearTimeout(alertTimer);
+            alertTriggered = false;
+            document.body.classList.remove('red-corners', 'red-alert', 'flashing');
+            document.getElementById('status').textContent = 'Device is moving, monitoring again...';
+        }
+
         // Monitor movement and trigger alert if needed
         let movementCheckInterval = setInterval(() => {
-            if (lastPosition) {
-                navigator.geolocation.getCurrentPosition((newPosition) => {
-                    let distance = calculateDistance(lastPosition.coords, newPosition.coords);
-                    if (distance < 0.001) {
-                        // If no significant movement for 20 seconds
-                        if (!alertTriggered) {
-                            alertTimer = setTimeout(triggerAlert, 20000); // 20 seconds without movement
-                        }
-                    } else {
-                        // Reset if moved
-                        clearTimeout(alertTimer);
-                        alertTriggered = false;
-                        document.body.classList.remove('red-corners', 'red-alert', 'flashing');
-                    }
-                });
+            if (lastPosition && !movementDetected) {
+                // If no movement detected for 20 seconds, trigger the alert
+                alertTimer = setTimeout(triggerAlert, 20000); // 20 seconds without movement
             }
-        }, 5000); // Check for movement every 5 seconds
+        }, 1000); // Check for movement every second
 
         // Function to stop alarm and flashing
         function stopAlarm() {
